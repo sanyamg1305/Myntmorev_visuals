@@ -2,31 +2,25 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from supabase import create_client, Client
-import base64
 
-# Supabase Configuration
+# ---- SET PAGE CONFIG FIRST ----
+st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
+
+# ---- SUPABASE CONFIG ----
 SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
-BUCKET_NAME = "myntmetric-files"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
+BUCKET_NAME = "myntmetrics-files"
 
-# Supabase client
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_supabase_client() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase = get_supabase_client()
 
-st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
-st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
-
-# Upload to Supabase
 def upload_to_supabase(file_bytes, filename):
     try:
-        res = supabase.storage.from_(BUCKET_NAME).upload(filename, file_bytes, {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
-        if res.get("error"):
-            st.error(f"Upload failed: {res['error']['message']}")
-            return False
-        return True
+        res = supabase.storage.from_(BUCKET_NAME).upload(file=BytesIO(file_bytes), path=filename, file_options={"upsert": True})
+        return res.get("Key") is not None
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return False
@@ -34,11 +28,7 @@ def upload_to_supabase(file_bytes, filename):
 def list_supabase_files():
     try:
         res = supabase.storage.from_(BUCKET_NAME).list()
-        if isinstance(res, list):
-            return [f["name"] for f in res if f["name"].endswith(".xlsx")]
-        else:
-            st.error("Failed to list files.")
-            return []
+        return [f["name"] for f in res if f["name"].endswith(".xlsx")]
     except Exception as e:
         st.error(f"Failed to list files: {e}")
         return []
@@ -46,16 +36,12 @@ def list_supabase_files():
 def read_excel_from_supabase(filename):
     try:
         res = supabase.storage.from_(BUCKET_NAME).download(filename)
-        if isinstance(res, bytes):
-            return pd.ExcelFile(BytesIO(res))
-        else:
-            st.error("Failed to download file from Supabase.")
-            return None
+        return pd.ExcelFile(BytesIO(res))
     except Exception as e:
-        st.error(f"Download failed: {e}")
+        st.error(f"Failed to read file: {e}")
         return None
 
-# Clean number
+# ---- UTILS ----
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -65,7 +51,8 @@ def clean_number(x):
     except:
         return 0
 
-# Upload section
+# ---- UI: Upload Section ----
+st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
@@ -83,14 +70,13 @@ if uploaded_file:
             filename = f"{month}_{year}.xlsx"
             success = upload_to_supabase(uploaded_file.getbuffer(), filename)
             if success:
-                st.success(f"✅ Uploaded and saved as `{filename}` in Supabase.")
+                st.success(f"✅ Uploaded and saved as `{filename}` to Supabase")
 
-# Load & Compare
+# ---- UI: Load & Compare Section ----
 st.header("📂 Load & Compare Monthly Data")
 month_options = [f.replace(".xlsx", "") for f in list_supabase_files()]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
-# Load and process selected files
 data_by_month = {}
 for filename in month_options:
     if filename in selected_months:
@@ -109,6 +95,7 @@ for filename in month_options:
             df['Month'] = filename
             data_by_month[filename] = df
 
+# ---- Display Metrics ----
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
