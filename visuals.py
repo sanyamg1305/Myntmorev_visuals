@@ -3,7 +3,7 @@ import pandas as pd
 from io import BytesIO
 from supabase import create_client
 
-# 🔧 Config must be first
+# 🧠 Set page config first
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 
 # 🔐 Supabase credentials
@@ -11,39 +11,27 @@ SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
 BUCKET_NAME = "myntmetrics-files"
 
-# 🔌 Connect to Supabase
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 📤 Upload file to Supabase Storage
+# 🔼 Upload to Supabase
 def upload_to_supabase(file_bytes, filename):
     try:
-        # Convert to bytes if needed
-        if isinstance(file_bytes, BytesIO):
-            file_bytes = file_bytes.getvalue()
-        supabase.storage.from_(BUCKET_NAME).upload(
-            filename,
-            file_bytes,
-            {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
-            upsert=True
-        )
+        data = file_bytes.read()
+        supabase.storage.from_(BUCKET_NAME).upload(filename, data, {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
         return True
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return False
 
-# 📄 List all files in Supabase Storage
+# 📄 List files
 def list_supabase_files():
     try:
-        return [
-            f["name"]
-            for f in supabase.storage.from_(BUCKET_NAME).list()
-            if f["name"].endswith(".xlsx")
-        ]
+        return [f["name"] for f in supabase.storage.from_(BUCKET_NAME).list() if f["name"].endswith(".xlsx")]
     except Exception as e:
         st.error(f"Failed to list files: {e}")
         return []
 
-# 📥 Read file from Supabase
+# 📥 Download and read Excel
 def read_excel_from_supabase(filename):
     try:
         file_data = supabase.storage.from_(BUCKET_NAME).download(filename)
@@ -52,7 +40,7 @@ def read_excel_from_supabase(filename):
         st.error(f"Failed to read file: {e}")
         return None
 
-# 🧹 Clean numeric data
+# 🧹 Clean numbers
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -62,11 +50,10 @@ def clean_number(x):
     except:
         return 0
 
-# ---------------- UI ----------------
-
+# UI begins
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 
-# Upload UI
+# Upload
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
@@ -86,13 +73,12 @@ if uploaded_file:
             if success:
                 st.success(f"✅ Uploaded as `{filename}`")
 
-# Load and select files
+# Load files
 st.header("📂 Load & Compare Monthly Data")
 available_files = list_supabase_files()
 month_options = [f.replace(".xlsx", "") for f in available_files]
 selected_months = st.multiselect("Select Month(s)", options=month_options, default=month_options)
 
-# Process files
 data_by_month = {}
 for month in selected_months:
     xls = read_excel_from_supabase(f"{month}.xlsx")
@@ -110,7 +96,6 @@ for month in selected_months:
         df['Month'] = month
         data_by_month[month] = df
 
-# Display chart
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
