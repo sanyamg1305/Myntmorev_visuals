@@ -1,65 +1,61 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-import boto3
-from botocore.exceptions import NoCredentialsError
+from supabase import create_client, Client
+import base64
 
-# ✅ Backblaze B2 S3-Compatible Configuration
-B2_KEY_ID = "00548633c258da10000000002"
-B2_APPLICATION_KEY = "K005AIX1EbwPPMnSNgRk7Ai+u1fnmQo"
-B2_BUCKET_NAME = "myntmetrics-files"
-B2_ENDPOINT = "https://s3.us-west-004.backblazeb2.com"
+# Supabase Configuration
+SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
+BUCKET_NAME = "myntmetric-files"
 
-# Streamlit UI config
+# Supabase client
+@st.cache_resource
+def get_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+supabase = get_supabase_client()
+
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 
-# Initialize B2 client
-@st.cache_resource(show_spinner=False)
-def get_b2_client():
-    session = boto3.session.Session()
-    return session.client(
-        service_name='s3',
-        aws_access_key_id=B2_KEY_ID,
-        aws_secret_access_key=B2_APPLICATION_KEY,
-        endpoint_url=B2_ENDPOINT,
-    )
-
-b2_client = get_b2_client()
-
-# Upload to B2
-def upload_to_b2(file_bytes, filename):
+# Upload to Supabase
+def upload_to_supabase(file_bytes, filename):
     try:
-        b2_client.upload_fileobj(BytesIO(file_bytes), B2_BUCKET_NAME, filename)
+        res = supabase.storage.from_(BUCKET_NAME).upload(filename, file_bytes, {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+        if res.get("error"):
+            st.error(f"Upload failed: {res['error']['message']}")
+            return False
         return True
-    except NoCredentialsError:
-        st.error("B2 credentials not available.")
-        return False
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return False
 
-# List B2 files
-def list_b2_files():
+def list_supabase_files():
     try:
-        response = b2_client.list_objects_v2(Bucket=B2_BUCKET_NAME)
-        return [content['Key'] for content in response.get('Contents', [])]
+        res = supabase.storage.from_(BUCKET_NAME).list()
+        if isinstance(res, list):
+            return [f["name"] for f in res if f["name"].endswith(".xlsx")]
+        else:
+            st.error("Failed to list files.")
+            return []
     except Exception as e:
         st.error(f"Failed to list files: {e}")
         return []
 
-# Read Excel from B2
-def read_excel_from_b2(filename):
-    buffer = BytesIO()
+def read_excel_from_supabase(filename):
     try:
-        b2_client.download_fileobj(B2_BUCKET_NAME, filename, buffer)
-        buffer.seek(0)
-        return pd.ExcelFile(buffer)
+        res = supabase.storage.from_(BUCKET_NAME).download(filename)
+        if isinstance(res, bytes):
+            return pd.ExcelFile(BytesIO(res))
+        else:
+            st.error("Failed to download file from Supabase.")
+            return None
     except Exception as e:
-        st.error(f"Failed to read file: {e}")
+        st.error(f"Download failed: {e}")
         return None
 
-# Utility to clean numbers
+# Clean number
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -83,22 +79,22 @@ if uploaded_file:
     with col2:
         year = st.number_input("Enter Year", min_value=2000, max_value=2100, value=2025, step=1)
     with col3:
-        if st.button("Upload to B2"):
+        if st.button("Upload to Supabase"):
             filename = f"{month}_{year}.xlsx"
-            success = upload_to_b2(uploaded_file.getbuffer(), filename)
+            success = upload_to_supabase(uploaded_file.getbuffer(), filename)
             if success:
-                st.success(f"Uploaded and saved as `{filename}` in Backblaze B2 ✅")
+                st.success(f"✅ Uploaded and saved as `{filename}` in Supabase.")
 
-# Load and compare section
+# Load & Compare
 st.header("📂 Load & Compare Monthly Data")
-month_options = [f.replace(".xlsx", "") for f in list_b2_files() if f.endswith(".xlsx")]
+month_options = [f.replace(".xlsx", "") for f in list_supabase_files()]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
-# Process data
+# Load and process selected files
 data_by_month = {}
 for filename in month_options:
     if filename in selected_months:
-        xls = read_excel_from_b2(f"{filename}.xlsx")
+        xls = read_excel_from_supabase(f"{filename}.xlsx")
         if xls is None:
             continue
         for sheet_name in xls.sheet_names:
@@ -113,7 +109,6 @@ for filename in month_options:
             df['Month'] = filename
             data_by_month[filename] = df
 
-# Display comparison
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
