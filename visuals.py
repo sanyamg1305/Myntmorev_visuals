@@ -3,36 +3,42 @@ import pandas as pd
 from io import BytesIO
 from supabase import create_client, Client
 
-# ---- SET PAGE CONFIG FIRST ----
+# 🧩 Set this as the first Streamlit command
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 
-# ---- SUPABASE CONFIG ----
+# 🔐 Supabase credentials
 SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
 BUCKET_NAME = "myntmetrics-files"
 
-@st.cache_resource(show_spinner=False)
-def get_supabase_client() -> Client:
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-supabase = get_supabase_client()
-
+# 📤 Upload file to Supabase Storage
 def upload_to_supabase(file_bytes, filename):
     try:
-        res = supabase.storage.from_(BUCKET_NAME).upload(file=BytesIO(file_bytes), path=filename, file_options={"upsert": True})
+        res = supabase.storage.from_(BUCKET_NAME).upload(
+            path=filename,
+            file=file_bytes,
+            file_options={"upsert": True}
+        )
         return res.get("Key") is not None
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return False
 
+# 📄 List all files in Supabase bucket
 def list_supabase_files():
     try:
-        res = supabase.storage.from_(BUCKET_NAME).list()
-        return [f["name"] for f in res if f["name"].endswith(".xlsx")]
+        return [
+            f["name"]
+            for f in supabase.storage.from_(BUCKET_NAME).list()
+            if f["name"].endswith(".xlsx")
+        ]
     except Exception as e:
         st.error(f"Failed to list files: {e}")
         return []
 
+# 📥 Download file from Supabase
 def read_excel_from_supabase(filename):
     try:
         res = supabase.storage.from_(BUCKET_NAME).download(filename)
@@ -41,7 +47,7 @@ def read_excel_from_supabase(filename):
         st.error(f"Failed to read file: {e}")
         return None
 
-# ---- UTILS ----
+# 🧹 Clean currency/numeric values
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -51,8 +57,11 @@ def clean_number(x):
     except:
         return 0
 
-# ---- UI: Upload Section ----
+# ------------------- Streamlit UI -------------------
+
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
+
+# Upload
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
@@ -68,34 +77,34 @@ if uploaded_file:
     with col3:
         if st.button("Upload to Supabase"):
             filename = f"{month}_{year}.xlsx"
-            success = upload_to_supabase(uploaded_file.getbuffer(), filename)
+            success = upload_to_supabase(uploaded_file.getbuffer().tobytes(), filename)
             if success:
-                st.success(f"✅ Uploaded and saved as `{filename}` to Supabase")
+                st.success(f"✅ Uploaded and saved as `{filename}` in Supabase Storage!")
 
-# ---- UI: Load & Compare Section ----
+# Load
 st.header("📂 Load & Compare Monthly Data")
 month_options = [f.replace(".xlsx", "") for f in list_supabase_files()]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
+# Process selected files
 data_by_month = {}
-for filename in month_options:
-    if filename in selected_months:
-        xls = read_excel_from_supabase(f"{filename}.xlsx")
-        if xls is None:
+for month in selected_months:
+    xls = read_excel_from_supabase(f"{month}.xlsx")
+    if xls is None:
+        continue
+    for sheet_name in xls.sheet_names:
+        df = xls.parse(sheet_name)
+        if 'Metrics' not in df.columns:
             continue
-        for sheet_name in xls.sheet_names:
-            df = xls.parse(sheet_name)
-            if 'Metrics' not in df.columns:
-                continue
-            df['Category'] = df['Metrics'].where(
-                df['Status'].isna() & df['Week 1'].isna() & df['Monthly Actual'].isna()
-            ).ffill()
-            df = df[~((df['Status'].isna()) & (df['Week 1'].isna()) & (df['Monthly Actual'].isna()))]
-            df = df[df['Metrics'].notna()]
-            df['Month'] = filename
-            data_by_month[filename] = df
+        df['Category'] = df['Metrics'].where(
+            df['Status'].isna() & df['Week 1'].isna() & df['Monthly Actual'].isna()
+        ).ffill()
+        df = df[~((df['Status'].isna()) & (df['Week 1'].isna()) & (df['Monthly Actual'].isna()))]
+        df = df[df['Metrics'].notna()]
+        df['Month'] = month
+        data_by_month[month] = df
 
-# ---- Display Metrics ----
+# Display dashboard
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
@@ -116,5 +125,5 @@ if data_by_month:
 
     st.bar_chart(chart_data.set_index('Month'))
 
-    st.write("### Detailed Table")
+    st.write("### 📋 Detailed Table")
     st.dataframe(display_df.reset_index(drop=True).astype(str))
