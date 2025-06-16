@@ -4,16 +4,17 @@ from io import BytesIO
 import boto3
 from botocore.exceptions import NoCredentialsError
 
-# Backblaze B2 Configuration (dummy credentials)
-B2_KEY_ID = "00548633c258da10000000001"
-B2_APPLICATION_KEY = "K0056MAFPdwaUkpoLyVCjRsovDQ9R0c"
+# ✅ Backblaze B2 S3-Compatible Configuration
+B2_KEY_ID = "00548633c258da10000000002"
+B2_APPLICATION_KEY = "K005AIX1EbwPPMnSNgRk7Ai+u1fnmQo"
 B2_BUCKET_NAME = "myntmetrics-files"
 B2_ENDPOINT = "https://s3.us-west-004.backblazeb2.com"
 
+# Streamlit UI config
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 
-# Get B2 client (cached so it doesn't reconnect every time)
+# Initialize B2 client
 @st.cache_resource(show_spinner=False)
 def get_b2_client():
     session = boto3.session.Session()
@@ -26,28 +27,28 @@ def get_b2_client():
 
 b2_client = get_b2_client()
 
-# Upload Excel file to B2 bucket
+# Upload to B2
 def upload_to_b2(file_bytes, filename):
     try:
         b2_client.upload_fileobj(BytesIO(file_bytes), B2_BUCKET_NAME, filename)
         return True
     except NoCredentialsError:
-        st.error("Credentials not available.")
+        st.error("B2 credentials not available.")
         return False
     except Exception as e:
-        st.error(f"Upload error: {e}")
+        st.error(f"Upload failed: {e}")
         return False
 
-# List all Excel files from B2 bucket
+# List B2 files
 def list_b2_files():
     try:
         response = b2_client.list_objects_v2(Bucket=B2_BUCKET_NAME)
-        return [content['Key'] for content in response.get('Contents', []) if content['Key'].endswith(".xlsx")]
+        return [content['Key'] for content in response.get('Contents', [])]
     except Exception as e:
         st.error(f"Failed to list files: {e}")
         return []
 
-# Download and read Excel file from B2
+# Read Excel from B2
 def read_excel_from_b2(filename):
     buffer = BytesIO()
     try:
@@ -58,7 +59,7 @@ def read_excel_from_b2(filename):
         st.error(f"Failed to read file: {e}")
         return None
 
-# Clean currency/numeric values
+# Utility to clean numbers
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -68,7 +69,7 @@ def clean_number(x):
     except:
         return 0
 
-# Upload UI
+# Upload section
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
@@ -86,13 +87,14 @@ if uploaded_file:
             filename = f"{month}_{year}.xlsx"
             success = upload_to_b2(uploaded_file.getbuffer(), filename)
             if success:
-                st.success(f"Uploaded and saved as {filename} in B2 ✅")
+                st.success(f"Uploaded and saved as `{filename}` in Backblaze B2 ✅")
 
-# Load files and display data
+# Load and compare section
 st.header("📂 Load & Compare Monthly Data")
-month_options = [f.replace(".xlsx", "") for f in list_b2_files()]
+month_options = [f.replace(".xlsx", "") for f in list_b2_files() if f.endswith(".xlsx")]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
+# Process data
 data_by_month = {}
 for filename in month_options:
     if filename in selected_months:
@@ -111,7 +113,7 @@ for filename in month_options:
             df['Month'] = filename
             data_by_month[filename] = df
 
-# Visualize data
+# Display comparison
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
@@ -133,5 +135,4 @@ if data_by_month:
     st.bar_chart(chart_data.set_index('Month'))
 
     st.write("### Detailed Table")
-    safe_display_df = display_df.reset_index(drop=True).astype(str)
-    st.dataframe(safe_display_df)
+    st.dataframe(display_df.reset_index(drop=True).astype(str))
