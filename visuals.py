@@ -1,57 +1,74 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-import os
 import boto3
-from botocore.client import Config
+from botocore.exceptions import NoCredentialsError
 
-# Cloudflare R2 Configuration
-R2_ACCESS_KEY_ID = "sanyam@myntmore.com"
-R2_SECRET_ACCESS_KEY = "941b182490142925d61487cd1509c54b677a3"
-R2_BUCKET_NAME = "myntmetrics-files"
-R2_ENDPOINT = "https://823b7248bb96f3485e0901c2e5da3802.r2.cloudflarestorage.com"
-
-# Boto3 client for R2
-s3 = boto3.client(
-    's3',
-    endpoint_url=R2_ENDPOINT,
-    aws_access_key_id=R2_ACCESS_KEY_ID,
-    aws_secret_access_key=R2_SECRET_ACCESS_KEY,
-    config=Config(signature_version='s3v4'),
-    region_name='auto'
-)
+# Backblaze B2 Configuration (dummy credentials)
+B2_KEY_ID = "00548633c258da10000000001"
+B2_APPLICATION_KEY = "K0056MAFPdwaUkpoLyVCjRsovDQ9R0c"
+B2_BUCKET_NAME = "myntmetrics-files"
+B2_ENDPOINT = "https://s3.us-west-004.backblazeb2.com"
 
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 
-# Upload file to R2
+# Get B2 client (cached so it doesn't reconnect every time)
 @st.cache_resource(show_spinner=False)
-def list_r2_files():
-    try:
-        response = s3.list_objects_v2(Bucket=R2_BUCKET_NAME)
-        files = response.get('Contents', [])
-        return [f['Key'] for f in files]
-    except Exception as e:
-        st.error(f"Failed to list R2 files: {e}")
-        return []
+def get_b2_client():
+    session = boto3.session.Session()
+    return session.client(
+        service_name='s3',
+        aws_access_key_id=B2_KEY_ID,
+        aws_secret_access_key=B2_APPLICATION_KEY,
+        endpoint_url=B2_ENDPOINT,
+    )
 
-def upload_to_r2(file_bytes, filename):
+b2_client = get_b2_client()
+
+# Upload Excel file to B2 bucket
+def upload_to_b2(file_bytes, filename):
     try:
-        s3.put_object(Bucket=R2_BUCKET_NAME, Key=filename, Body=file_bytes)
+        b2_client.upload_fileobj(BytesIO(file_bytes), B2_BUCKET_NAME, filename)
         return True
+    except NoCredentialsError:
+        st.error("Credentials not available.")
+        return False
     except Exception as e:
-        st.error(f"Upload to R2 failed: {e}")
+        st.error(f"Upload error: {e}")
         return False
 
-def download_r2_file(key):
+# List all Excel files from B2 bucket
+def list_b2_files():
     try:
-        response = s3.get_object(Bucket=R2_BUCKET_NAME, Key=key)
-        return pd.ExcelFile(BytesIO(response['Body'].read()))
+        response = b2_client.list_objects_v2(Bucket=B2_BUCKET_NAME)
+        return [content['Key'] for content in response.get('Contents', []) if content['Key'].endswith(".xlsx")]
     except Exception as e:
-        st.error(f"Failed to read file from R2: {e}")
+        st.error(f"Failed to list files: {e}")
+        return []
+
+# Download and read Excel file from B2
+def read_excel_from_b2(filename):
+    buffer = BytesIO()
+    try:
+        b2_client.download_fileobj(B2_BUCKET_NAME, filename, buffer)
+        buffer.seek(0)
+        return pd.ExcelFile(buffer)
+    except Exception as e:
+        st.error(f"Failed to read file: {e}")
         return None
 
-# File upload section
+# Clean currency/numeric values
+def clean_number(x):
+    if pd.isna(x):
+        return 0
+    x = str(x).replace(",", "").replace("₹", "").replace("?", "").strip()
+    try:
+        return float(x)
+    except:
+        return 0
+
+# Upload UI
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
@@ -65,25 +82,22 @@ if uploaded_file:
     with col2:
         year = st.number_input("Enter Year", min_value=2000, max_value=2100, value=2025, step=1)
     with col3:
-        if st.button("Upload to Cloudflare R2"):
+        if st.button("Upload to B2"):
             filename = f"{month}_{year}.xlsx"
-            success = upload_to_r2(uploaded_file.getbuffer(), filename)
+            success = upload_to_b2(uploaded_file.getbuffer(), filename)
             if success:
-                st.success(f"Uploaded and saved as {filename} in R2 ✅")
+                st.success(f"Uploaded and saved as {filename} in B2 ✅")
 
-# Show available files to load
+# Load files and display data
 st.header("📂 Load & Compare Monthly Data")
-all_files = list_r2_files()
-month_options = [f.replace(".xlsx", "") for f in all_files if f.endswith(".xlsx")]
+month_options = [f.replace(".xlsx", "") for f in list_b2_files()]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
-# Load and process selected files
 data_by_month = {}
-for file in all_files:
-    label = file.replace(".xlsx", "")
-    if label in selected_months:
-        xls = download_r2_file(file)
-        if not xls:
+for filename in month_options:
+    if filename in selected_months:
+        xls = read_excel_from_b2(f"{filename}.xlsx")
+        if xls is None:
             continue
         for sheet_name in xls.sheet_names:
             df = xls.parse(sheet_name)
@@ -94,9 +108,10 @@ for file in all_files:
             ).ffill()
             df = df[~((df['Status'].isna()) & (df['Week 1'].isna()) & (df['Monthly Actual'].isna()))]
             df = df[df['Metrics'].notna()]
-            df['Month'] = label
-            data_by_month[label] = df
+            df['Month'] = filename
+            data_by_month[filename] = df
 
+# Visualize data
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
@@ -112,16 +127,6 @@ if data_by_month:
 
     st.subheader(f"📈 {selected_metric} across months")
     chart_data = display_df[['Month', 'Monthly Actual', 'Monthly Target']].copy()
-
-    def clean_number(x):
-        if pd.isna(x):
-            return 0
-        x = str(x).replace(",", "").replace("₹", "").replace("?", "").strip()
-        try:
-            return float(x)
-        except:
-            return 0
-
     chart_data['Monthly Actual'] = chart_data['Monthly Actual'].apply(clean_number)
     chart_data['Monthly Target'] = chart_data['Monthly Target'].apply(clean_number)
 
