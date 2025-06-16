@@ -3,7 +3,7 @@ import pandas as pd
 from io import BytesIO
 import os
 import json
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2 import service_account
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
@@ -19,8 +19,10 @@ def authenticate_drive():
     with open("myntmoremetrics-3099e8c12eed.json") as f:
         service_account_info = json.load(f)
 
-    scope = ['https://www.googleapis.com/auth/drive']
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+    credentials = service_account.Credentials.from_service_account_info(
+        service_account_info,
+        scopes=['https://www.googleapis.com/auth/drive']
+    )
 
     gauth = GoogleAuth()
     gauth.credentials = credentials
