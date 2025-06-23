@@ -2,56 +2,90 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from supabase import create_client, Client
-import re
 
-# ───── Supabase Config ─────
-SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
-BUCKET = "myntmetrics-files"
-
-# ───── Must be first Streamlit command ─────
+# 🧩 Page config
 st.set_page_config(page_title="MyntMetrics Dashboard", layout="wide")
 st.title("📊 MyntMetrics: Multi-Month Metrics Dashboard")
 
-# ───── Supabase Client Init ─────
-@st.cache_resource
-def get_supabase_client():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+# 🔐 Supabase config
+SUPABASE_URL = "https://ecqhgzbcvzbpyrfytqtq.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVjcWhnemJjdnpicHlyZnl0cXRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1OTQ3NSwiZXhwIjoyMDY1NjM1NDc1fQ.t_LYs4coYrmGBPIwjfwpF_JxYh1SA5mg1POBQGBREkk"
+BUCKET_NAME = "myntmetrics-files"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-supabase: Client = get_supabase_client()
+# ✅ Define allowed metrics
+defined_metrics = {
+    "SALES": [
+        "Jahnvi Sales connection requests", "Jahnvi Sales Inmail messages",
+        "Accepted connection requests", "Connection requests acceptance rate",
+        "Meetings booked", "Meetings completed", "Conversions"
+    ],
+    "TEJAS JHAVERI": [
+        "No of posts posted", "Impressions", "Profile viewers (Bi-Monthly)",
+        "Engagement", "Search Appearances", "New followers", "Total follower count",
+        "Happiness Index (0-10) | Week 4"
+    ],
+    "SHIRIN DHABHAR": [
+        "No of text + image posts posted", "No of carousels posted", "Impressions",
+        "Profile viewers (Bi-Monthly)", "Followers", "Total Follower Count",
+        "Happiness Index (0-10) | Week 4"
+    ],
+    "HEMAL JHAVERI": [
+        "No of posts posted", "Sent Invitations", "Accepted Invitations", "Acceptance Rate",
+        "Hot Leads", "Meetings Booked", "Profile Viewers (Bi-monthly)", "Impressions",
+        "Followers", "Total Follower Count", "Happiness Index (0-10) | Week 4"
+    ],
+    "SITANSHU": [
+        "No of text + image posts posted", "Carousels posted", "Impressions", "Engagements",
+        "Profile viewers (Bi-Monthly)", "Followers", "Total Follower Count",
+        "Connection Requests Sent", "Accepted Invitations", "Acceptance Rate", "Hot Leads",
+        "Meetings Booked", "Happiness Index (0-10) | Week 4"
+    ],
+    "HOZEFA": [
+        "No of text + image posts posted", "No of carousels posted", "Total posts posted",
+        "EOM Report", "Impressions", "Engagement", "Profile viewers (Bi-Monthly)",
+        "Followers", "Total Follower Count", "InMails Requests Sent", "Connection Requests Sent",
+        "Accepted Invitations", "Acceptance Rate", "Hot Leads", "Meetings Booked",
+        "Happiness Index (0-10) | Week 4"
+    ],
+    "SANDEEP KHEMKA": [
+        "No of text + image posts posted", "No of carousels posted", "Total posts posted",
+        "Impressions", "Engagement", "Profile viewers (Bi-Monthly)", "New Followers",
+        "Total Follower Count", "InMails Requests Sent", "Connection Requests Sent",
+        "Accepted Invitations", "Acceptance Rate", "Hot Leads", "Meetings Booked",
+        "Happiness Index (0-10) | Week 4"
+    ],
+    "MOHIT JHAVERI": [
+        "No of text + image posts posted", "No of carousels posted", "Total posts posted",
+        "Impressions", "Engagement", "Profile viewers (Bi-Monthly)", "Followers",
+        "Total Follower Count", "InMails Requests Sent", "Connection Requests Sent",
+        "Accepted Invitations", "Acceptance Rate", "Hot Leads", "Meetings Booked",
+        "Happiness Index (0-10) | Week 4"
+    ],
+    "Linkedin Newsletter": [
+        "LinkedIn Newsletter Subscriber count", "New subscribers", "Members Reached",
+        "Email sends", "Email open rate", "Impressions", "Article Views"
+    ],
+    "Email Newsletter": [
+        "Subscriber count", "Unsubscribed", "Sent", "Delivered", "Open", "Open Rate", "Clicked",
+        "Soft Bounce", "Hard Bounce", "Total Bounce Rate", "Replies",
+        "Website Newsletter (footer) Converstions", "Website Newsletter (footer) Interactions",
+        "Website Newsletter (page) Coversions", "Website Newsletter (page) Interactions"
+    ],
+    "Myntmore Marketing": [
+        "Instagram Posts", "LinkedIn Posts", "Facebook Posts", "Instagram Follower Count",
+        "Instagram New Followers", "Facebook follower Count", "Linkedin Follower Count",
+        "Linkedin New Followers", "Impressions", "Clicks", "Reactions", "Comments",
+        "Engagement Rate", "Total page views", "Total unique visitors",
+        "Website traffic - Active users", "Average session duration", "Bounce rate",
+        "Website traffic - New Users"
+    ],
+    "ATHARVA VIDEO EDITOR": [
+        "Videos sent to atharva", "Videos edited", "Videos posted", "Videos shot", "TJ Approvals"
+    ]
+}
 
-# ───── Upload Excel File to Supabase ─────
-def upload_to_supabase(file, filename):
-    try:
-        supabase.storage.from_(BUCKET).upload(
-            path=filename,
-            file=file.getvalue(),
-            file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
-        )
-        return True
-    except Exception as e:
-        st.error(f"Upload failed: {e}")
-        return False
-
-# ───── List Excel Files from Supabase ─────
-def list_supabase_files():
-    try:
-        files = supabase.storage.from_(BUCKET).list()
-        return [f["name"] for f in files if f["name"].endswith(".xlsx")]
-    except Exception as e:
-        st.error(f"Failed to list files: {e}")
-        return []
-
-# ───── Read Excel File from Supabase ─────
-def read_excel_from_supabase(filename):
-    try:
-        file = supabase.storage.from_(BUCKET).download(filename)
-        return pd.ExcelFile(BytesIO(file))
-    except Exception as e:
-        st.error(f"Failed to read file: {e}")
-        return None
-
-# ───── Clean numeric values ─────
+# 🔧 Clean currency-like fields
 def clean_number(x):
     if pd.isna(x):
         return 0
@@ -61,10 +95,37 @@ def clean_number(x):
     except:
         return 0
 
-# ───── Upload Section ─────
+# 🧩 Supabase functions
+def upload_to_supabase(file_bytes, filename):
+    try:
+        res = supabase.storage.from_(BUCKET_NAME).upload(
+            path=filename,
+            file=file_bytes,
+            file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "upsert": "true"}
+        )
+        return res is not None
+    except Exception as e:
+        st.error(f"Upload failed: {e}")
+        return False
+
+def list_supabase_files():
+    try:
+        return [f["name"] for f in supabase.storage.from_(BUCKET_NAME).list() if f["name"].endswith(".xlsx")]
+    except Exception as e:
+        st.error(f"Failed to list files: {e}")
+        return []
+
+def read_excel_from_supabase(filename):
+    try:
+        res = supabase.storage.from_(BUCKET_NAME).download(filename)
+        return pd.ExcelFile(BytesIO(res))
+    except Exception as e:
+        st.error(f"Failed to read file: {e}")
+        return None
+
+# 📤 Upload Interface
 st.header("📤 Upload Monthly Data")
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
-
 if uploaded_file:
     col1, col2, col3 = st.columns([3, 3, 1])
     with col1:
@@ -77,66 +138,87 @@ if uploaded_file:
     with col3:
         if st.button("Upload to Supabase"):
             filename = f"{month}_{year}.xlsx"
-            success = upload_to_supabase(uploaded_file, filename)
+            success = upload_to_supabase(uploaded_file.getbuffer().tobytes(), filename)
             if success:
-                st.success(f"✅ Uploaded and saved as `{filename}`")
+                st.success(f"✅ Uploaded and saved as `{filename}` in Supabase Storage!")
 
-# ───── Load and Compare Monthly Data ─────
+# 📂 Load & Compare Section
 st.header("📂 Load & Compare Monthly Data")
-file_list = list_supabase_files()
-month_options = [f.replace(".xlsx", "") for f in file_list]
+month_options = [f.replace(".xlsx", "") for f in list_supabase_files()]
 selected_months = st.multiselect("Select Month(s) to View", options=month_options, default=month_options)
 
 data_by_month = {}
-
-for month_label in selected_months:
-    xls = read_excel_from_supabase(f"{month_label}.xlsx")
+for month in selected_months:
+    xls = read_excel_from_supabase(f"{month}.xlsx")
     if xls is None:
         continue
     for sheet_name in xls.sheet_names:
         df = xls.parse(sheet_name)
-        if 'Metrics' not in df.columns or 'Monthly Actual' not in df.columns:
+        if 'Metrics' not in df.columns:
             continue
-        df['Category'] = df['Metrics'].where(
-            df['Status'].isna() & df['Week 1'].isna() & df['Monthly Actual'].isna()
-        ).ffill()
-        df = df[~((df['Status'].isna()) & (df['Week 1'].isna()) & (df['Monthly Actual'].isna()))]
-        df = df[df['Metrics'].notna()]
-        df['MonthLabel'] = month_label
-        df['Month'], df['Year'] = re.findall(r'([A-Za-z]+)_([0-9]+)', month_label)[0]
-        df['MonthNum'] = pd.to_datetime(df['Month'], format='%B').dt.month
-        df['Year'] = df['Year'].astype(int)
-        data_by_month[month_label] = df
 
+        valid_rows = []
+        for cat, metrics in defined_metrics.items():
+            for metric in metrics:
+                match = df[df['Metrics'].astype(str).str.strip().str.lower() == metric.lower()]
+                if not match.empty:
+                    match = match.copy()
+                    match['Category'] = cat
+                    valid_rows.append(match)
+
+        if valid_rows:
+            filtered_df = pd.concat(valid_rows, ignore_index=True)
+            filtered_df['Month'] = month
+            data_by_month[month] = filtered_df
+
+# 📊 Dashboard View
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
 
-    # Sort data
-    combined_df.sort_values(by=["Year", "MonthNum"], inplace=True)
+    # Add a datetime column for sorting
+    def parse_month_year(row):
+        import calendar
+        try:
+            month_name, year = row['Month'].split('_')
+            month_num = list(calendar.month_name).index(month_name)
+            return pd.Timestamp(year=int(year), month=month_num, day=1)
+        except Exception:
+            return pd.NaT
+    combined_df['Month_Year'] = combined_df.apply(parse_month_year, axis=1)
+    combined_df = combined_df.sort_values('Month_Year')
 
-    # ───── Sidebar Filters ─────
     st.sidebar.header("🔎 Filter Metrics")
-    categories = combined_df['Category'].dropna().unique()
+    categories = list(defined_metrics.keys())
     selected_category = st.sidebar.selectbox("Select Category", options=categories)
 
-    filtered_df = combined_df[combined_df['Category'] == selected_category]
-    metrics = filtered_df['Metrics'].dropna().unique()
+    filtered = combined_df[combined_df['Category'] == selected_category]
+    metrics = defined_metrics[selected_category]
     selected_metric = st.sidebar.selectbox("Select Metric", options=metrics)
 
-    display_df = filtered_df[filtered_df['Metrics'] == selected_metric].copy()
-    display_df['Monthly Actual'] = display_df['Monthly Actual'].apply(clean_number)
-    display_df['Monthly Target'] = display_df['Monthly Target'].apply(clean_number)
+    display_df = filtered[filtered['Metrics'].str.lower() == selected_metric.lower()]
+    chart_data = display_df[['Month', 'Monthly Actual', 'Month_Year']].copy()
+    chart_data['Monthly Actual'] = chart_data['Monthly Actual'].apply(clean_number)
+    chart_data = chart_data.sort_values('Month_Year')
 
-    # ───── Chart ─────
-    st.subheader(f"📈 {selected_metric} Over Time")
-    chart_df = display_df[['MonthLabel', 'Monthly Actual', 'Monthly Target']]
-    chart_df.set_index('MonthLabel', inplace=True)
+    # Sort display_df and chart_data by Month_Year for correct order
+    display_df = display_df.sort_values('Month_Year')
+    chart_data = chart_data.sort_values('Month_Year')
 
-    st.bar_chart(chart_df)
+    st.subheader(f"📈 {selected_metric} across months")
+    # Set Month as a categorical type with the correct order for plotting
+    chart_data['Month'] = pd.Categorical(chart_data['Month'], categories=chart_data['Month'], ordered=True)
+    st.bar_chart(chart_data.set_index('Month')['Monthly Actual'])
 
-    # ───── Table ─────
+    # High and low score with month/year
+    max_val = chart_data['Monthly Actual'].max()
+    min_val = chart_data['Monthly Actual'].min()
+    max_row = chart_data[chart_data['Monthly Actual'] == max_val].iloc[0] if not chart_data[chart_data['Monthly Actual'] == max_val].empty else None
+    min_row = chart_data[chart_data['Monthly Actual'] == min_val].iloc[0] if not chart_data[chart_data['Monthly Actual'] == min_val].empty else None
+    max_month = max_row['Month'] if max_row is not None else "-"
+    min_month = min_row['Month'] if min_row is not None else "-"
+
+    st.metric("📈 High Score", f"{max_val:,.0f}", help=f"Month: {max_month}")
+    st.metric("📉 Low Score", f"{min_val:,.0f}", help=f"Month: {min_month}")
+
     st.write("### 📋 Detailed Table")
-    st.dataframe(display_df[['MonthLabel', 'Metrics', 'Monthly Actual', 'Monthly Target', 'Category']].reset_index(drop=True))
-
-else:
-    st.info("Upload or select monthly data to see visualizations.")
+    st.dataframe(display_df.reset_index(drop=True).astype(str))
