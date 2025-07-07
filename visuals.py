@@ -174,6 +174,8 @@ for month in selected_months:
 # 📊 Dashboard View
 if data_by_month:
     combined_df = pd.concat(data_by_month.values(), ignore_index=True)
+    # Drop duplicates to ensure each metric is unique per month and category
+    combined_df = combined_df.drop_duplicates(subset=['Month', 'Metrics', 'Category'], keep='first')
 
     # Add a datetime column for sorting
     def parse_month_year(row):
@@ -205,8 +207,14 @@ if data_by_month:
     chart_data = chart_data.sort_values('Month_Year')
 
     st.subheader(f"📈 {selected_metric} across months")
-    # Set Month as a categorical type with the correct order for plotting
-    chart_data['Month'] = pd.Categorical(chart_data['Month'], categories=chart_data['Month'], ordered=True)
+    # Create ordered categories from unique sorted months
+    unique_months = chart_data['Month'].unique()
+    chart_data['Month'] = pd.Categorical(
+        chart_data['Month'],
+        categories=unique_months,
+        ordered=True
+    )
+    
     st.bar_chart(chart_data.set_index('Month')['Monthly Actual'])
 
     # High and low score with month/year
