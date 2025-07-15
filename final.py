@@ -1,6 +1,9 @@
 
 import streamlit as st
 import pandas as pd
+import re
+from pandas.api.types import CategoricalDtype
+import calendar
 
 # ---------------------------
 # 📊 Embedded data
@@ -30,10 +33,12 @@ data_records = [
     {'Month': 'December2024', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 301},
     {'Month': 'December2024', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 14},
     {'Month': 'December2024', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 5715},
+    {'Month': 'December2024', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 304},
     {'Month': 'December2024', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 17},
     {'Month': 'December2024', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 21},
     {'Month': 'December2024', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 9},
     {'Month': 'December2024', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 4152},
+    {'Month': 'December2024', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 159},
     {'Month': 'December2024', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 74},
     {'Month': 'December2024', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 69},
     {'Month': 'January2025', 'Main Category': 'SALES', 'Sub Category': 'Jahnvi Sales connection requests', 'Monthly Actual': 305.0},
@@ -61,11 +66,13 @@ data_records = [
     {'Month': 'January2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 272.0},
     {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 18.0},
     {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 8104.0},
+    {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 393.0},
     {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 45.0},
     {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 393.0},
     {'Month': 'January2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 66.0},
     {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 4.0},
     {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 2459.0},
+    {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 142.0},
     {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 35.0},
     {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 142.0},
     {'Month': 'January2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 63.0},
@@ -94,10 +101,12 @@ data_records = [
     {'Month': 'February2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 135.0},
     {'Month': 'February2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 15.0},
     {'Month': 'February2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 9453.0},
+    {'Month': 'February2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 448.0},
     {'Month': 'February2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 92.0},
     {'Month': 'February2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 57.0},
     {'Month': 'February2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 4.0},
     {'Month': 'February2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 5373.0},
+    {'Month': 'February2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 196.0},
     {'Month': 'February2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 83.0},
     {'Month': 'February2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 86.0},
     {'Month': 'February2025', 'Main Category': 'SITANSHU', 'Sub Category': 'No of posts posted', 'Monthly Actual': 6.0},
@@ -130,10 +139,12 @@ data_records = [
     {'Month': 'March2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 428.0},
     {'Month': 'March2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 16.0},
     {'Month': 'March2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 23625.0},
+    {'Month': 'March2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 969.0},
     {'Month': 'March2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 130.0},
     {'Month': 'March2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 232.0},
     {'Month': 'March2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 4.0},
     {'Month': 'March2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 1573.0},
+    {'Month': 'March2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 79.0},
     {'Month': 'March2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 45.0},
     {'Month': 'March2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 28.0},
     {'Month': 'March2025', 'Main Category': 'SITANSHU', 'Sub Category': 'No of posts posted', 'Monthly Actual': 14.0},
@@ -167,11 +178,13 @@ data_records = [
     {'Month': 'April2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Total follower count', 'Monthly Actual': 10395.0},
     {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 10.0},
     {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 29424.0},
+    {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 1080.0},
     {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 102.0},
     {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 270.0},
     {'Month': 'April2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Total Follower Count', 'Monthly Actual': 1131.0},
     {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 4.0},
     {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 2077.0},
+    {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 106.0},
     {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 23.0},
     {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 83.0},
     {'Month': 'April2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Total Follower Count', 'Monthly Actual': 673.0},
@@ -195,12 +208,20 @@ data_records = [
     {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 197.0},
     {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Engagement', 'Monthly Actual': 344.0},
     {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 294.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Total follower count', 'Monthly Actual': 10743.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'All Appearances', 'Monthly Actual': 26895.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Comments', 'Monthly Actual': 131.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Posts', 'Monthly Actual': 165.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Network Recommendations', 'Monthly Actual': 90.0},
+    {'Month': 'May2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Search', 'Monthly Actual': 16.0},
     {'Month': 'May2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 10.0},
     {'Month': 'May2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 12383.0},
+    {'Month': 'May2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 498.0},
     {'Month': 'May2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 171.0},
     {'Month': 'May2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 107.0},
     {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 4.0},
     {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 1730.0},
+    {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 57.0},
     {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 205.0},
     {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 301.0},
     {'Month': 'May2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Total Follower Count', 'Monthly Actual': 1029.0},
@@ -244,13 +265,20 @@ data_records = [
     {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 189.0},
     {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Engagement', 'Monthly Actual': 393.0},
     {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 370.0},
+    {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'All Appearances', 'Monthly Actual': 23447.0},
+    {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Comments', 'Monthly Actual': 162.0},
+    {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Posts', 'Monthly Actual': 172.0},
+    {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Network Recommendations', 'Monthly Actual': 57.0},
+    {'Month': 'June2025', 'Main Category': 'TEJAS JHAVERI', 'Sub Category': 'Search', 'Monthly Actual': 16.0},
     {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'No of text + image posts posted', 'Monthly Actual': 8.0},
     {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Impressions', 'Monthly Actual': 10429.0},
+    {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 409.0},
     {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Profile viewers (Bi-Monthly)', 'Monthly Actual': 66.0},
     {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'New Followers', 'Monthly Actual': 72.0},
     {'Month': 'June2025', 'Main Category': 'SHIRIN DHABHAR', 'Sub Category': 'Total Follower Count', 'Monthly Actual': 1270.0},
     {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'No of posts posted', 'Monthly Actual': 2.0},
     {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Profile Viewers (Bi-monthly)', 'Monthly Actual': 328.0},
+    {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Engagement metrics', 'Monthly Actual': 46.0},
     {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Impressions', 'Monthly Actual': 1713.0},
     {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'New Followers', 'Monthly Actual': 323.0},
     {'Month': 'June2025', 'Main Category': 'HEMAL JHAVERI', 'Sub Category': 'Total Follower Count', 'Monthly Actual': 1353.0},
@@ -293,33 +321,19 @@ data_records = [
 # ---------------------------
 data = pd.DataFrame(data_records)
 
+# Ensure correct numeric types
+data["Monthly Actual"] = pd.to_numeric(data["Monthly Actual"], errors="coerce")
+
 # Drop rows with missing Main Category or Sub Category
 data = data.dropna(subset=["Main Category", "Sub Category"])
 
-# --- Month ordering fix ---
-# Extract year and month for sorting
-import re
-from pandas.api.types import CategoricalDtype
-
-def parse_month_year(month_str):
-    match = re.match(r"([A-Za-z]+)(\\d{4})", month_str)
-    if match:
-        month_name, year = match.groups()
-        # Month order: Dec, Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov
-        month_order = ["December", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November"]
-        month_num = month_order.index(month_name) if month_name in month_order else -1
-        return int(year), month_num
-    return (0, 0)
-
-# Get all unique months in correct order
-unique_months = sorted(data["Month"].unique(), key=parse_month_year)
-month_cat_type = CategoricalDtype(categories=unique_months, ordered=True)
-data["Month"] = data["Month"].astype(month_cat_type)
+# Drop rows where Monthly Actual is NaN (prevents KeyError in groupby)
+data = data.dropna(subset=["Monthly Actual"])
 
 # ---------------------------
-# 🔍 Compute high & low
+# 🔍 Compute high & low per (Main + Sub Category)
 # ---------------------------
-high_low = data.groupby("Sub Category").apply(
+high_low = data.groupby(["Main Category", "Sub Category"]).apply(
     lambda x: pd.Series({
         "High Score": x["Monthly Actual"].max(),
         "High Month": x.loc[x["Monthly Actual"].idxmax(), "Month"],
@@ -333,20 +347,32 @@ high_low = data.groupby("Sub Category").apply(
 # ---------------------------
 st.title("📊 Monthly Data Visualisation Across Categories")
 
+def parse_month_year(month_str):
+    # e.g., 'December2024'
+    for i, name in enumerate(calendar.month_name):
+        if name and month_str.startswith(name):
+            year = int(month_str[len(name):])
+            return year, i
+    return (0, 0)
+
+unique_months = sorted(data["Month"].dropna().unique(), key=parse_month_year)
+month_cat_type = CategoricalDtype(categories=unique_months, ordered=True)
+data["Month"] = data["Month"].astype(month_cat_type)
+
 selected_category = st.selectbox("Pick a main category", data["Main Category"].dropna().unique())
 filtered_data = data[data["Main Category"] == selected_category]
 
 selected_subcategory = st.selectbox("Pick a sub category", filtered_data["Sub Category"].unique())
 chart_data = filtered_data[filtered_data["Sub Category"] == selected_subcategory]
 
-# Sort chart_data by Month for correct plotting
+# Ensure chart_data is sorted by Month for correct plotting
 chart_data = chart_data.sort_values("Month")
 
 # Chart
 st.line_chart(chart_data.set_index("Month")["Monthly Actual"])
 
 # High/Low summary
-hl_row = high_low[high_low["Sub Category"] == selected_subcategory]
+hl_row = high_low[(high_low["Main Category"] == selected_category) & (high_low["Sub Category"] == selected_subcategory)]
 if not hl_row.empty:
     st.success(f"Highest: {hl_row['High Score'].values[0]} in {hl_row['High Month'].values[0]}")
     st.error(f"Lowest: {hl_row['Low Score'].values[0]} in {hl_row['Low Month'].values[0]}")
@@ -354,4 +380,4 @@ if not hl_row.empty:
 # ---------------------------
 # 📝 Notes
 # ---------------------------
-st.caption("All data embedded. Ready for Streamlit Cloud deployment.")
+st.caption("All data embedded. High & Low computed per Main+Sub category. Ready for Streamlit Cloud deployment.")
